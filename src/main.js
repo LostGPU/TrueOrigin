@@ -1,4 +1,4 @@
-import { copy, journeyStops, productById, products, SITE_URL } from "./catalog.js";
+import { copy, productById, products, SITE_URL } from "./catalog.js";
 import { addToCart, cartCount, getCart, removeFromCart, setCartQuantity } from "./cart.js";
 import { footer, header, orderSummary, productCard, quantityControl } from "./components.js";
 
@@ -14,26 +14,42 @@ const productSlug = path.startsWith("/product/") ? path.slice("/product/".length
 const page = path === "/" ? "home" : path === "/shop" ? "shop" : path === "/warenkorb" ? "cart" : path === "/checkout" ? "checkout" : productSlug ? "product" : "not-found";
 const text = () => copy[language];
 
-function renderMap() {
+function renderArticleLookup() {
   const labels = text();
-  const selectedStop = document.querySelector(".journey-stop[aria-pressed='true']")?.dataset.stop || "ursprung";
-  const selected = journeyStops.find((stop) => stop.id === selectedStop) || journeyStops[0];
-  return `<div class="map-card">
-    <div class="map-topline"><span>${labels.mapHeading}</span><span>${language === "de" ? "ELFENBEINKÜSTE → ROTTERDAM → HAMBURG" : "CÔTE D’IVOIRE → ROTTERDAM → HAMBURG"}</span></div>
-    <p class="map-disclaimer">${labels.mapNotice}</p>
-    <div id="origin-map" class="map-graphic" role="region" aria-label="${labels.mapHeading}"></div>
-    <div class="journey-stops">${journeyStops.map((stop) => {
-      const place = language === "de" ? stop.placeDe : stop.placeEn;
-      const title = language === "de" ? stop.de : stop.en;
-      return `<button class="journey-stop" type="button" data-stop="${stop.id}" aria-pressed="${selectedStop === stop.id}"><small>${stop.number} / ${place}</small><strong>${title}</strong></button>`;
-    }).join("")}</div>
-    <p class="journey-detail" aria-live="polite">${language === "de" ? selected.copyDe : selected.copyEn}</p>
-    <div class="map-facts">
-      <div class="map-fact"><span class="fact-index">01 / ${labels.mapFactsTitle}</span><strong>${labels.mapFact1}</strong><p>${labels.mapFact1Text}</p></div>
-      <div class="map-fact"><span class="fact-index">02 / ${labels.mapFactsTitle}</span><strong>${labels.mapFact2}</strong><p>${labels.mapFact2Text}</p></div>
-      <div class="map-fact"><span class="fact-index">03 / ${labels.mapFactsTitle}</span><strong>${labels.mapFact3}</strong><p>${labels.mapFact3Text}</p></div>
-    </div>
+  return `<div class="article-lookup">
+    <div class="article-lookup-copy"><h3>${labels.articleSearchTitle}</h3><p>${labels.articleSearchText}</p></div>
+    <form class="article-lookup-form" data-article-lookup>
+      <label for="article-number">${labels.articleNumber}</label>
+      <div class="article-lookup-controls">
+        <input id="article-number" name="articleNumber" type="text" placeholder="${labels.articleSearchPlaceholder}" autocomplete="off" required>
+        <button class="button button-dark" type="submit">${labels.articleSearchButton}<span aria-hidden="true">↗</span></button>
+      </div>
+      <p class="article-lookup-message" data-article-message aria-live="polite"></p>
+    </form>
   </div>`;
+}
+
+function renderProductTrace(product) {
+  const labels = text();
+  const stops = product.supplyChain?.stops || [];
+  const hasRoute = stops.length > 0;
+  const isExample = product.supplyChain?.status === "example";
+  const routeDetail = isExample
+    ? labels.traceExampleDetail
+    : hasRoute ? labels.traceAvailable : labels.traceUnavailableDetail;
+  const routeNotice = isExample
+    ? labels.traceExample
+    : hasRoute ? labels.traceAvailable : labels.traceUnavailable;
+  return `<section class="journey-section product-trace" id="lieferkette"><div class="page-shell">
+    <div class="section-heading"><div><p class="eyebrow"><span class="eyebrow-dot"></span>${labels.articleNumber} ${product.articleNumber}</p><h2>${labels.productTraceTitle}</h2></div>
+      <p class="section-intro">${routeDetail}</p></div>
+    <div class="map-card">
+      <div class="map-topline"><span>${product.name[language]}</span><span>${product.articleNumber}</span></div>
+      <p class="map-disclaimer">${routeNotice}</p>
+      <div id="origin-map" class="map-graphic" data-product-map="${product.id}" role="region" aria-label="${labels.productTraceTitle} — ${product.name[language]}"></div>
+      ${hasRoute ? `<ol class="route-stops" aria-label="${labels.productTraceTitle}">${stops.map((stop, index) => `<li class="route-stop"><span class="route-stop-number">${String(index + 1).padStart(2, "0")}</span><div><span>${stop.stage[language]}</span><strong>${stop.place[language]}</strong></div></li>`).join("")}</ol>` : ""}
+    </div>
+  </div></section>`;
 }
 
 function loadLeaflet() {
@@ -57,6 +73,8 @@ async function initializeMap() {
   const container = document.querySelector("#origin-map");
   if (!container) return;
   try {
+    const product = productById(container.dataset.productMap);
+    if (!product) throw new Error("Für die Lieferkettenkarte wurde kein Produkt gefunden.");
     const L = await loadLeaflet();
     if (!container.isConnected) return;
     supplyMap?.remove();
@@ -65,35 +83,23 @@ async function initializeMap() {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(supplyMap);
-
-    const locations = [
-      { id: "ursprung", coordinates: [6.8276, -5.2893], title: "Yamoussoukro · Côte d’Ivoire" },
-      { id: "export", coordinates: [5.36, -4.0083], title: language === "de" ? "Abidjan · Hafen" : "Abidjan · port" },
-      { id: "umschlag", coordinates: [51.9244, 4.4777], title: language === "de" ? "Rotterdam · europäischer Hafen" : "Rotterdam · European port" },
-      { id: "weiterverarbeitung", coordinates: [53.5511, 9.9937], title: language === "de" ? "Hamburg · Zielpunkt" : "Hamburg · destination" }
-    ];
-    const seaRoute = [
-      [5.36, -4.0083], [7, -12], [12, -22], [20, -28], [29, -25],
-      [37, -17], [43, -9], [48, -4], [51.9244, 4.4777]
-    ];
-    const regionalRoute = L.polyline([[6.8276, -5.2893], [6.2, -4.8], [5.36, -4.0083]], {
-      color: "#b28c5e", weight: 3, opacity: .85, dashArray: "4 7"
-    }).addTo(supplyMap);
-    const route = L.polyline(seaRoute, { color: "#668260", weight: 3, opacity: .8, dashArray: "7 8" }).addTo(supplyMap);
-    const onwardRoute = L.polyline([[51.9244, 4.4777], [52.7, 6.6], [53.5511, 9.9937]], {
-      color: "#b28c5e", weight: 3, opacity: .85, dashArray: "4 7"
-    }).addTo(supplyMap);
-    const markers = new Map();
-    locations.forEach((location) => {
-      const marker = L.circleMarker(location.coordinates, {
+    const stops = product.supplyChain?.stops || [];
+    if (stops.length) {
+      const coordinates = stops.map((stop) => stop.coordinates);
+      const lineStyle = { color: "#668260", weight: 3, opacity: .85 };
+      if (product.supplyChain.status === "example") lineStyle.dashArray = "7 8";
+      const route = coordinates.length > 1
+        ? L.polyline(coordinates, lineStyle).addTo(supplyMap)
+        : null;
+      const markers = stops.map((stop) => L.circleMarker(stop.coordinates, {
         radius: 7, color: "#fcfaf5", weight: 3, fillColor: "#587258", fillOpacity: 1
-      }).bindTooltip(location.title, { direction: "top", offset: [0, -7] }).addTo(supplyMap);
-      marker.on("click", () => updateJourney(location.id));
-      markers.set(location.id, marker);
-    });
-    supplyMap.fitBounds(L.featureGroup([regionalRoute, route, onwardRoute, ...markers.values()]).getBounds(), { padding: [28, 28] });
+      }).bindTooltip(`${stop.stage[language]} · ${stop.place[language]}`, { direction: "top", offset: [0, -7] }).addTo(supplyMap));
+      const bounds = L.featureGroup(route ? [route, ...markers] : markers).getBounds();
+      supplyMap.fitBounds(bounds, { padding: [28, 28] });
+    } else {
+      supplyMap.setView([24, 10], 2);
+    }
     supplyMap.invalidateSize();
-    supplyMap.__markers = markers;
   } catch (error) {
     console.error(error);
     container.innerHTML = `<p class="map-error">${language === "de" ? "Die Karte ist gerade nicht erreichbar." : "The map is currently unavailable."} <a href="https://www.openstreetmap.org/#map=3/28/-9" target="_blank" rel="noreferrer">${language === "de" ? "OpenStreetMap öffnen" : "Open OpenStreetMap"} ↗</a></p>`;
@@ -108,22 +114,22 @@ function renderHome() {
         <div class="hero-actions"><a class="button button-dark" href="/shop">${labels.heroCta}<span>↗</span></a><a class="text-link" href="#journey">${labels.heroSecondary}<span>↓</span></a></div>
         <p class="hero-note"><span class="note-rule"></span>${labels.heroNote}</p>
       </div>
-      <div class="hero-visual reveal"><img class="hero-photo" src="${products[1].image}" alt="${language === "de" ? "Schokoladenstücke als Nahaufnahme" : "Chocolate pieces in close-up"}" fetchpriority="high"><div class="photo-shade"></div>
+      <div class="hero-visual reveal"><img class="hero-photo" src="${products[1].image}" alt="${products[1].imageAlt[language]}" fetchpriority="high"><div class="photo-shade"></div>
         <div class="hero-stamp"><span>${labels.heroStamp}</span><strong>TRUE<br>ORIGIN</strong></div>
-        <div class="hero-product-label"><span class="label-line"></span><span>${language === "de" ? "KAKAO · HERKUNFT · HANDWERK" : "CACAO · ORIGIN · CRAFT"}</span></div>
+        <div class="hero-product-label"><span class="label-line"></span><span>${language === "de" ? "SCHOKOLADE · SORTEN · HERKUNFT" : "CHOCOLATE · VARIETIES · ORIGIN"}</span></div>
         <div class="hero-caption"><span>${labels.heroCaption}</span><span>TRUEORIGIN</span></div>
       </div><span class="hero-side-note" aria-hidden="true">${labels.brandLine}</span>
     </section>
     <section class="intro-strip" aria-label="${language === "de" ? "Unsere Werte" : "Our values"}"><div class="intro-inner"><span>${labels.promiseA}</span><span class="intro-star">✳</span><span>${labels.promiseB}</span><span class="intro-star">✳</span><span>${labels.promiseC}</span></div></section>
     <section class="story-section page-shell"><div class="story-grid">
-      <div class="story-image reveal"><img src="${products[0].image}" alt="${language === "de" ? "Dunkle Schokoladenstücke" : "Dark chocolate pieces"}" loading="lazy" decoding="async"></div>
+      <div class="story-image reveal"><img src="${products[0].image}" alt="${products[0].imageAlt[language]}" loading="lazy" decoding="async"></div>
       <div class="story-copy reveal"><p class="eyebrow"><span class="eyebrow-dot"></span>${labels.introEyebrow}</p><h2>${labels.introTitle}</h2><p>${labels.introText}</p>
         <div class="story-badges"><span class="pill">${labels.pointOne}</span><span class="pill">${labels.pointTwo}</span><span class="pill">${labels.pointThree}</span></div>
       </div>
     </div></section>
     <section class="journey-section" id="journey"><div class="page-shell">
       <div class="section-heading reveal"><div><p class="eyebrow"><span class="eyebrow-dot"></span>${labels.journeyEyebrow}</p><h2>${labels.journeyTitle}</h2></div><p class="section-intro">${labels.journeyDescription}</p></div>
-      ${renderMap()}
+      ${renderArticleLookup()}
     </div></section>
     <section class="shop-section" id="shop"><div class="page-shell">
       <div class="shop-heading reveal"><div><p class="eyebrow"><span class="eyebrow-dot"></span>${labels.shopEyebrow}</p><h2>${labels.shopTitle}</h2></div><a class="text-link shop-all" href="/shop">${labels.shopAll}<span>↗</span></a></div>
@@ -136,7 +142,7 @@ function renderHome() {
         <article class="impact-card"><span class="impact-number">03</span><h3>${labels.impactThreeTitle}</h3><p>${labels.impactThreeText}</p></article>
       </div><p class="impact-disclaimer">${labels.impactFootnote}</p>
     </section>
-    <section class="closing-note"><div class="closing-inner"><span class="closing-mark">“</span><p>${language === "de" ? "Gute Schokolade schmeckt nach mehr.<br>Ihre Geschichte sollte es auch." : "Good chocolate should taste like more.<br>Its story should too."}</p><span class="closing-origin">TRUEORIGIN / CACAO WITH INTENTION</span></div></section>
+    <section class="closing-note"><div class="closing-inner"><span class="closing-mark">“</span><p>${labels.closingNote}</p><span class="closing-origin">TRUEORIGIN</span></div></section>
     <section class="shop-cta page-shell"><div><p class="eyebrow"><span class="eyebrow-dot"></span>TRUEORIGIN</p><h2>${labels.ctaTitle}</h2></div><a class="button button-dark" href="/shop">${labels.ctaButton}<span>↗</span></a></section>`;
 }
 
@@ -156,6 +162,7 @@ function renderProduct(product) {
       <div class="detail-copy">
         <p class="eyebrow"><span class="eyebrow-dot"></span>${product.category[language]}</p>
         <h1>${product.name[language]}</h1><p class="detail-subtitle">${product.tagline[language]}</p>
+        <p class="product-article-number">${labels.articleNumber}: <strong>${product.articleNumber}</strong></p>
         <p class="availability-label ${product.available ? "is-available" : "is-unavailable"}"><span class="availability-dot" aria-hidden="true"></span>${product.available ? labels.available : labels.unavailable}</p>
         <div class="detail-cacao"><span>${labels.cacao}</span><strong>${product.cacaoPercentage === null ? labels.cacaoNotSpecified : `${product.cacaoPercentage}%`}</strong></div>
         <p class="detail-description">${product.description[language]}</p>
@@ -167,7 +174,7 @@ function renderProduct(product) {
         </div>
       </div>
     </div>
-  </section>`;
+  </section>${renderProductTrace(product)}`;
 }
 
 function renderCart() {
@@ -232,6 +239,9 @@ function renderPageContent() {
   main.classList.add("page-content-enter");
   observeReveals();
   initializeMap();
+  if (page === "product" && window.location.hash === "#lieferkette") {
+    requestAnimationFrame(() => document.querySelector("#lieferkette")?.scrollIntoView());
+  }
 }
 
 function render() {
@@ -254,16 +264,6 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 2400);
 }
 
-function updateJourney(stopId) {
-  const stop = journeyStops.find((entry) => entry.id === stopId);
-  if (!stop) return;
-  document.querySelectorAll(".journey-stop").forEach((element) => {
-    element.setAttribute("aria-pressed", String(element.dataset.stop === stopId));
-  });
-  document.querySelector(".journey-detail").textContent = language === "de" ? stop.copyDe : stop.copyEn;
-  supplyMap?.__markers?.get(stopId)?.openTooltip();
-}
-
 document.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
@@ -275,11 +275,7 @@ document.addEventListener("click", (event) => {
     return;
   }
   const action = target.closest("[data-action]");
-  if (!action) {
-    const stopButton = target.closest("[data-stop]");
-    if (stopButton) updateJourney(stopButton.dataset.stop);
-    return;
-  }
+  if (!action) return;
   if (action.dataset.action === "menu") {
     const nav = document.querySelector("#main-navigation");
     const open = nav.classList.toggle("is-open");
@@ -303,6 +299,26 @@ document.addEventListener("click", (event) => {
     input.value = String(Math.max(1, Math.min(99, next)));
     if (control.dataset.itemId) setCartQuantity(control.dataset.itemId, Number(input.value));
   }
+});
+
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-article-lookup")) return;
+  event.preventDefault();
+  const input = form.elements.namedItem("articleNumber");
+  const message = form.querySelector("[data-article-message]");
+  if (!(input instanceof HTMLInputElement) || !message) {
+    throw new Error("Das Artikelsuchformular ist unvollständig.");
+  }
+  const normalizedNumber = input.value.trim().toUpperCase().replace(/[\s-]/g, "");
+  const product = products.find((entry) =>
+    entry.articleNumber.toUpperCase().replace(/[\s-]/g, "") === normalizedNumber
+  );
+  if (!product) {
+    message.textContent = text().articleSearchNotFound;
+    return;
+  }
+  window.location.assign(`/product/${product.id}#lieferkette`);
 });
 
 document.addEventListener("change", (event) => {

@@ -8,9 +8,8 @@ export function header(language, cartCount, currentPage, theme) {
   const journeyHref = currentPage === "home" ? "#journey" : "/#journey";
   const impactHref = currentPage === "home" ? "#impact" : "/#impact";
   return `
-    <div class="announcement">${language === "de" ? "TrueOrigin · Schokolade mit einer Geschichte" : "TrueOrigin · Chocolate with a story"}</div>
     <header class="site-header" id="top">
-      <a class="wordmark" href="/" aria-label="TrueOrigin — ${text.home}">True<span>Origin</span><i>.</i></a>
+      <a class="wordmark" href="/" aria-label="TrueOrigin — ${text.home}"><img class="wordmark-logo" src="/assets/images/True%20Origin%20Logo.png" alt="" width="2172" height="724" fetchpriority="high"></a>
       <nav class="main-nav" id="main-navigation" aria-label="${language === "de" ? "Hauptnavigation" : "Main navigation"}">
         <a href="${shopHref}" ${currentPage === "shop" ? 'aria-current="page"' : ""}>${text.navShop}</a>
         <a href="${journeyHref}">${text.navStory}</a>
@@ -23,7 +22,7 @@ export function header(language, cartCount, currentPage, theme) {
           <button type="button" class="language-button ${language === "en" ? "is-active" : ""}" data-language="en" aria-pressed="${language === "en"}">EN</button>
         </div>
         <button class="theme-toggle" type="button" data-action="theme-toggle" aria-label="${themeLabel}" title="${themeLabel}"><span aria-hidden="true">${themeIcon}</span></button>
-        <a class="bag-link" href="/warenkorb" aria-label="${text.bag}"><span class="bag-label">${text.bag}</span><span class="bag-count">${cartCount || ""}</span></a>
+        <a class="bag-link" href="/warenkorb" aria-label="${text.bag}"><svg class="bag-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span class="bag-label">${text.bag}</span><span class="bag-count">${cartCount || ""}</span></a>
         <button class="menu-toggle" type="button" data-action="menu" aria-label="${text.menu}" aria-expanded="false" aria-controls="main-navigation">☰</button>
       </div>
     </header>`;
@@ -35,7 +34,7 @@ export function footer(language) {
     <footer class="site-footer">
       <div class="footer-main page-shell">
         <div class="footer-brand">
-          <a class="wordmark wordmark-footer" href="/">True<span>Origin</span><i>.</i></a>
+          <a class="wordmark wordmark-footer" href="/" aria-label="TrueOrigin"><img class="wordmark-logo" src="/assets/images/True%20Origin%20Logo.png" alt="" width="2172" height="724"></a>
           <p>${text.footerTagline}</p>
         </div>
         <div class="footer-column"><span class="footer-heading">${text.footerExplore}</span><a href="/shop">${text.navShop}</a><a href="/#journey">${text.navStory}</a><a href="/#impact">${text.navImpact}</a></div>
